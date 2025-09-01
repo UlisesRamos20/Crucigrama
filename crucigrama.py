@@ -273,14 +273,39 @@ HTML = r"""
     button.warn{border-color:#f08aa8}
     .status{min-height:24px;margin:6px 0 12px;color:var(--muted)}
 
+    /* Crucigrama */
+    .grid-scroll{
+      /* Desktop/default: visible, sin barras */
+      overflow: visible;
+      width: 100%;
+    }
     table.cg{border-collapse:collapse;margin:auto}
     table.cg td{
       width:28px;height:28px;text-align:center;vertical-align:middle;
       border:1px solid var(--grid);font-weight:700;font-size:15px;
       border-radius:6px;
+      /* Evita que el navegador intente encoger la tabla */
+      white-space: nowrap;
     }
     table.cg td.block{background:var(--block)}
     table.cg td.cell{background:var(--cell)}
+
+    /* SOLO en móvil: permitir scroll horizontal sin escalar */
+    @media (max-width: 768px){
+      .grid-scroll{
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 6px; /* espacio para la barra */
+      }
+      /* Mantener la tabla con su ancho natural y desplazarla */
+      .grid-scroll table.cg{
+        display: inline-block; /* evita que se ajuste al ancho del contenedor */
+        margin: 0;             /* alinear a la izquierda para iniciar el scroll desde el inicio */
+      }
+      /* Un poco menos de padding general en móvil */
+      .wrap{ padding: 12px; }
+    }
 
     .clues{display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow:auto}
     .clue{background:#fff7fb;border:1px solid var(--border);border-radius:16px;padding:10px}
@@ -309,7 +334,11 @@ HTML = r"""
           <button id="resetBtn">Reiniciar</button>
         </div>
         <div class="status" id="status"></div>
-        <div id="grid"></div>
+
+        <!-- NUEVO: contenedor desplazable en móvil -->
+        <div class="grid-scroll">
+          <div id="grid"></div>
+        </div>
       </section>
 
       <aside class="side-card">
@@ -414,6 +443,7 @@ HTML = r"""
 </body>
 </html>
 """
+
 
 @app.route('/')
 def index():
