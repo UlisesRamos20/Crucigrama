@@ -464,5 +464,6 @@ def _payload_state():
     return { 'state': s, 'revealed': rv, 'solved': all_solved(s, rv) }
 
 if __name__ == '__main__':
-    # Dev server
-    app.run(debug=True)
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
