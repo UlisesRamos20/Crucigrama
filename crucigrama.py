@@ -226,11 +226,20 @@ def set_revealed(revealed):
     session['revealed'] = revealed
 
 def all_solved(state, revealed) -> bool:
-    for r in range(GRID_SIZE):
-        for c in range(GRID_SIZE):
-            if state['used_mask'][r][c] and revealed[r][c] in (None, '#'):
-                return False
+    # Check only the cells that belong to placements
+    for p in state['placements']:
+        if p['orientation'] == 'H':
+            for i in range(p['length']):
+                r, c = p['row'], p['col'] + i
+                if not revealed[r][c] or revealed[r][c] == '#':
+                    return False
+        else:
+            for i in range(p['length']):
+                r, c = p['row'] + i, p['col']
+                if not revealed[r][c] or revealed[r][c] == '#':
+                    return False
     return True
+
 
 HTML = r"""
 <!doctype html>
@@ -240,86 +249,83 @@ HTML = r"""
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Crucigrama · Una Sola Salud</title>
   <style>
-    :root{
-      --bg1:#fff5f9; --bg2:#ffeaf3;
-      --card:#ffffff; --ink:#5a4b57; --muted:#8b6f7a;
-      --accent:#e85d8e; --ok:#2ecc71; --bad:#ff6b88;
-      --border:#f3c5d5; --border-strong:#f0a7bd;
-      --chip:#ffe3ee; --chip-text:#a74b69;
-      --block:#fdeaf2; --cell:#ffffff;
-      --grid:#f4b6c8;
-      --button-bg:#ffffff; --button-border:#f0a7bd; --button-hover:#fff0f6;
-      --shadow: 0 12px 28px rgba(232,93,142,0.12);
-      --radius:18px;
-    }
-    *{box-sizing:border-box;font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;}
-    body{margin:0;background:linear-gradient(120deg,var(--bg1),var(--bg2));color:var(--ink);}
-    .wrap{max-width:1180px;margin:28px auto;padding:16px;}
-    .layout{display:grid;grid-template-columns:1fr 420px;gap:18px;}
-    @media (max-width: 980px){.layout{grid-template-columns:1fr;}}
-
-    h1{font-size:26px;margin:0 0 14px;letter-spacing:.2px;color:#7a3654;}
-    .grid-card,.side-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);}
-    .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
-    input[type="text"], button{
-      background:var(--button-bg);color:var(--ink);
-      border:1.5px solid var(--button-border);
-      border-radius:14px;padding:10px 12px;font-size:14px;outline:none;
-      transition:background .15s, box-shadow .15s, transform .02s ease-in-out;
-    }
-    input[type="text"]:focus, button:focus{box-shadow:0 0 0 3px #ffd3e3;}
-    button{cursor:pointer}
-    button:hover{background:var(--button-hover)}
-    button.warn{border-color:#f08aa8}
-    .status{min-height:24px;margin:6px 0 12px;color:var(--muted)}
-
-    /* Crucigrama */
-    .grid-scroll{
-      /* Desktop/default: visible, sin barras */
-      overflow: visible;
-      width: 100%;
-    }
-    table.cg{border-collapse:collapse;margin:auto}
-    table.cg td{
-      width:28px;height:28px;text-align:center;vertical-align:middle;
-      border:1px solid var(--grid);font-weight:700;font-size:15px;
-      border-radius:6px;
-      /* Evita que el navegador intente encoger la tabla */
-      white-space: nowrap;
-    }
-    table.cg td.block{background:var(--block)}
-    table.cg td.cell{background:var(--cell)}
-
-    /* SOLO en móvil: permitir scroll horizontal sin escalar */
-    @media (max-width: 768px){
-      .grid-scroll{
-        overflow-x: auto;
-        overflow-y: hidden;
-        -webkit-overflow-scrolling: touch;
-        padding-bottom: 6px; /* espacio para la barra */
+      :root{
+        --bg1:#fff5f9; --bg2:#ffeaf3;
+        --card:#ffffff; --ink:#5a4b57; --muted:#8b6f7a;
+        --accent:#e85d8e; --ok:#2ecc71; --bad:#ff6b88;
+        --border:#f3c5d5; --border-strong:#f0a7bd;
+        --chip:#ffe3ee; --chip-text:#a74b69;
+        --block:#fdeaf2; --cell:#ffffff;
+        --grid:#f4b6c8;
+        --button-bg:#ffffff; --button-border:#f0a7bd; --button-hover:#fff0f6;
+        --shadow: 0 12px 28px rgba(232,93,142,0.12);
+        --radius:18px;
       }
-      /* Mantener la tabla con su ancho natural y desplazarla */
-      .grid-scroll table.cg{
-        display: inline-block; /* evita que se ajuste al ancho del contenedor */
-        margin: 0;             /* alinear a la izquierda para iniciar el scroll desde el inicio */
-      }
-      /* Un poco menos de padding general en móvil */
-      .wrap{ padding: 12px; }
-    }
+      *{box-sizing:border-box;font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;}
+      body{margin:0;background:linear-gradient(120deg,var(--bg1),var(--bg2));color:var(--ink);}
+      .wrap{max-width:1180px;margin:28px auto;padding:16px;}
+      .layout{display:grid;grid-template-columns:1fr 420px;gap:18px;}
+      @media (max-width: 980px){.layout{grid-template-columns:1fr;}}
 
-    .clues{display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow:auto}
-    .clue{background:#fff7fb;border:1px solid var(--border);border-radius:16px;padding:10px}
-    .clue h4{margin:0 0 6px;font-size:14px;color:var(--accent)}
-    .clue p{margin:0;font-size:14px;color:#6d5965}
-    .solved{opacity:.55}
-    .num-badge{
-      display:inline-block;min-width:28px;text-align:center;
-      background:var(--chip);border:1px solid var(--border-strong);
-      color:var(--chip-text);border-radius:10px;padding:3px 8px;margin-right:6px;font-weight:700
-    }
-    .pill{font-size:12px;padding:3px 8px;border:1px solid var(--border-strong);border-radius:999px;background:var(--chip);color:var(--chip-text)}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  </style>
+      h1{font-size:26px;margin:0 0 14px;letter-spacing:.2px;color:#7a3654;}
+      .grid-card,.side-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);}
+      .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+      input[type="text"], button{
+        background:var(--button-bg);color:var(--ink);
+        border:1.5px solid var(--button-border);
+        border-radius:14px;padding:10px 12px;font-size:14px;outline:none;
+        transition:background .15s, box-shadow .15s, transform .02s ease-in-out;
+      }
+      input[type="text"]:focus, button:focus{box-shadow:0 0 0 3px #ffd3e3;}
+      button{cursor:pointer}
+      button:hover{background:var(--button-hover)}
+      button.warn{border-color:#f08aa8}
+      .status{min-height:24px;margin:6px 0 12px;color:var(--muted)}
+
+      /* Contenedor del crucigrama */
+      .grid-scroll{ overflow: visible; width: 100%; }
+      table.cg{ border-collapse:collapse; margin:auto; table-layout:fixed; border-spacing:0; }
+      table.cg td{
+        width:28px; height:28px; text-align:center; vertical-align:middle;
+        border:1px solid var(--grid); font-weight:700; font-size:15px; border-radius:6px;
+        white-space:nowrap;
+      }
+      table.cg td.block{ background:var(--block) }
+      table.cg td.cell{ background:var(--cell) }
+
+      /* SOLO móvil: no escalar, permitir scroll horizontal, y casillas ~doble */
+      @media (max-width: 768px){
+        .grid-scroll{
+          overflow-x:auto; overflow-y:hidden;
+          -webkit-overflow-scrolling:touch;
+          padding-bottom:8px;
+        }
+        .grid-scroll table.cg{
+          display:inline-block;      /* asegura que la tabla mantenga su ancho natural */
+          margin:0;                  /* alinea a la izquierda para empezar el scroll desde el inicio */
+        }
+        table.cg td{
+          width:56px; height:56px;   /* ~doble de 28px */
+          font-size:22px;            /* más legible */
+          border-radius:8px;
+        }
+        .wrap{ padding:12px; }
+      }
+
+      .clues{display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow:auto}
+      .clue{background:#fff7fb;border:1px solid var(--border);border-radius:16px;padding:10px}
+      .clue h4{margin:0 0 6px;font-size:14px;color:var(--accent)}
+      .clue p{margin:0;font-size:14px;color:#6d5965}
+      .solved{opacity:.55}
+      .num-badge{
+        display:inline-block;min-width:28px;text-align:center;
+        background:var(--chip);border:1px solid var(--border-strong);
+        color:var(--chip-text);border-radius:10px;padding:3px 8px;margin-right:6px;font-weight:700
+      }
+      .pill{font-size:12px;padding:3px 8px;border:1px solid var(--border-strong);border-radius:999px;background:var(--chip);color:var(--chip-text)}
+      .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    </style>
+
 </head>
 <body>
   <div class="wrap">
@@ -334,11 +340,7 @@ HTML = r"""
           <button id="resetBtn">Reiniciar</button>
         </div>
         <div class="status" id="status"></div>
-
-        <!-- NUEVO: contenedor desplazable en móvil -->
-        <div class="grid-scroll">
-          <div id="grid"></div>
-        </div>
+        <div id="grid"></div>
       </section>
 
       <aside class="side-card">
@@ -443,7 +445,6 @@ HTML = r"""
 </body>
 </html>
 """
-
 
 @app.route('/')
 def index():
