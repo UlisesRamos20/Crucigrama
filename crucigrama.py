@@ -3,18 +3,16 @@
 """
 Web Crossword (Flask single-file app)
 ====================================
-- Run:  python app.py
+- Run:  python crucigrama.py
 - Open: http://127.0.0.1:5000
 - UI in Spanish; code/comments in English.
 - Accepts answers ignoring accents, spaces and case.
 - No external assets; everything is embedded.
 """
 
-import json
 import unicodedata
 from typing import List, Tuple, Dict, Optional
-
-from flask import Flask, render_template_string, request, session, jsonify, redirect, url_for
+from flask import Flask, render_template_string, request, session, jsonify
 
 # -------------------------
 # Data: clues and answers
@@ -45,7 +43,6 @@ GRID_SIZE = 27
 # -------------------------
 # Normalization helpers
 # -------------------------
-
 def strip_accents(s: str) -> str:
     return ''.join(ch for ch in unicodedata.normalize('NFD', s) if unicodedata.category(ch) != 'Mn')
 
@@ -84,9 +81,6 @@ class Crossword:
         self.grid: List[List[Optional[str]]] = [[None for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
         self.used_mask: List[List[bool]] = [[False for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
         self.placements: List[Placement] = []
-
-    def in_bounds(self, r: int, c: int) -> bool:
-        return 0 <= r < GRID_SIZE and 0 <= c < GRID_SIZE
 
     def can_place(self, word: str, r: int, c: int, ori: str) -> Tuple[bool, int]:
         L = len(word)
@@ -185,7 +179,7 @@ class Crossword:
                                 break
                         if placed:
                             break
-        # Number placements by reading order
+        # Number by reading order
         self.placements.sort(key=lambda p: (p.row, p.col))
         for i, p in enumerate(self.placements, start=1):
             p.number = i
@@ -213,27 +207,23 @@ class Crossword:
 # Flask app
 # -------------------------
 app = Flask(__name__)
-app.secret_key = 'crossword-secret-key'  # for demo only
+app.secret_key = 'crossword-secret-key'  # demo only
 
 def new_game():
     cw = Crossword(RAW_ENTRIES)
     cw.generate()
     state = cw.to_state()
-    # revealed grid mirrors used_mask but with None for hidden cells
     revealed = [[None if state['used_mask'][r][c] else '#' for c in range(GRID_SIZE)] for r in range(GRID_SIZE)]
     session['state'] = state
     session['revealed'] = revealed
-
 
 def get_game():
     if 'state' not in session or 'revealed' not in session:
         new_game()
     return session['state'], session['revealed']
 
-
 def set_revealed(revealed):
     session['revealed'] = revealed
-
 
 def all_solved(state, revealed) -> bool:
     for r in range(GRID_SIZE):
@@ -250,32 +240,60 @@ HTML = r"""
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Crucigrama · Una Sola Salud</title>
   <style>
-    :root { --bg:#0b1020; --card:#11172a; --ink:#e7eefc; --muted:#a9b2c7; --accent:#58a6ff; --ok:#2ecc71; --bad:#ff6b6b; }
-    *{ box-sizing:border-box; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial; }
-    body{ margin:0; background:linear-gradient(120deg,#0b1020,#131a2e); color:var(--ink); }
-    .wrap{ max-width:1200px; margin:24px auto; padding:16px; }
-    .grid-card, .side-card { background:var(--card); border:1px solid #1f2842; border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
-    .layout{ display:grid; grid-template-columns: 1fr 420px; gap:16px; }
-    @media (max-width: 980px){ .layout{ grid-template-columns: 1fr; } }
-    h1{ font-size:24px; margin:0 0 12px; letter-spacing:.3px; }
-    .toolbar{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
-    button, input[type="text"], select{ background:#0f1628; color:var(--ink); border:1px solid #243055; border-radius:12px; padding:10px 12px; font-size:14px; }
-    button{ cursor:pointer; }
-    button.ok{ border-color:#29583a; }
-    button.warn{ border-color:#5a2730; }
-    .status{ min-height:24px; margin:6px 0 12px; color:var(--muted); }
-    table.cg{ border-collapse: collapse; margin:auto; }
-    table.cg td{ width:28px; height:28px; text-align:center; vertical-align:middle; border:1px solid #1e2744; font-weight:700; font-size:15px; }
-    table.cg td.block{ background:#0a0f1d; }
-    table.cg td.cell{ background:#10182c; }
-    .clues{ display:flex; flex-direction:column; gap:8px; max-height:70vh; overflow:auto; }
-    .clue{ background:#0e162b; border:1px solid #202b4a; border-radius:12px; padding:10px; }
-    .clue h4{ margin:0 0 6px; font-size:14px; color:var(--accent); }
-    .clue p{ margin:0; font-size:14px; color:#cbd6ef; }
-    .solved{ opacity:.55; }
-    .num-badge{ display:inline-block; min-width:26px; text-align:center; background:#172140; border:1px solid #253157; border-radius:8px; padding:2px 6px; margin-right:6px; }
-    .pill{ font-size:12px; padding:2px 6px; border:1px solid #2a355e; border-radius:999px; color:#a9b8e9; }
-    .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    :root{
+      --bg1:#fff5f9; --bg2:#ffeaf3;
+      --card:#ffffff; --ink:#5a4b57; --muted:#8b6f7a;
+      --accent:#e85d8e; --ok:#2ecc71; --bad:#ff6b88;
+      --border:#f3c5d5; --border-strong:#f0a7bd;
+      --chip:#ffe3ee; --chip-text:#a74b69;
+      --block:#fdeaf2; --cell:#ffffff;
+      --grid:#f4b6c8;
+      --button-bg:#ffffff; --button-border:#f0a7bd; --button-hover:#fff0f6;
+      --shadow: 0 12px 28px rgba(232,93,142,0.12);
+      --radius:18px;
+    }
+    *{box-sizing:border-box;font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;}
+    body{margin:0;background:linear-gradient(120deg,var(--bg1),var(--bg2));color:var(--ink);}
+    .wrap{max-width:1180px;margin:28px auto;padding:16px;}
+    .layout{display:grid;grid-template-columns:1fr 420px;gap:18px;}
+    @media (max-width: 980px){.layout{grid-template-columns:1fr;}}
+
+    h1{font-size:26px;margin:0 0 14px;letter-spacing:.2px;color:#7a3654;}
+    .grid-card,.side-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+    input[type="text"], button{
+      background:var(--button-bg);color:var(--ink);
+      border:1.5px solid var(--button-border);
+      border-radius:14px;padding:10px 12px;font-size:14px;outline:none;
+      transition:background .15s, box-shadow .15s, transform .02s ease-in-out;
+    }
+    input[type="text"]:focus, button:focus{box-shadow:0 0 0 3px #ffd3e3;}
+    button{cursor:pointer}
+    button:hover{background:var(--button-hover)}
+    button.warn{border-color:#f08aa8}
+    .status{min-height:24px;margin:6px 0 12px;color:var(--muted)}
+
+    table.cg{border-collapse:collapse;margin:auto}
+    table.cg td{
+      width:28px;height:28px;text-align:center;vertical-align:middle;
+      border:1px solid var(--grid);font-weight:700;font-size:15px;
+      border-radius:6px;
+    }
+    table.cg td.block{background:var(--block)}
+    table.cg td.cell{background:var(--cell)}
+
+    .clues{display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow:auto}
+    .clue{background:#fff7fb;border:1px solid var(--border);border-radius:16px;padding:10px}
+    .clue h4{margin:0 0 6px;font-size:14px;color:var(--accent)}
+    .clue p{margin:0;font-size:14px;color:#6d5965}
+    .solved{opacity:.55}
+    .num-badge{
+      display:inline-block;min-width:28px;text-align:center;
+      background:var(--chip);border:1px solid var(--border-strong);
+      color:var(--chip-text);border-radius:10px;padding:3px 8px;margin-right:6px;font-weight:700
+    }
+    .pill{font-size:12px;padding:3px 8px;border:1px solid var(--border-strong);border-radius:999px;background:var(--chip);color:var(--chip-text)}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   </style>
 </head>
 <body>
@@ -296,7 +314,7 @@ HTML = r"""
 
       <aside class="side-card">
         <div class="row" style="justify-content:space-between;">
-          <strong>Pistas</strong>
+          <strong style="color:#7a3654;">Pistas</strong>
           <span id="progress" class="pill"></span>
         </div>
         <div class="clues" id="clues"></div>
@@ -405,7 +423,7 @@ def index():
 @app.route('/state')
 def state():
     state, revealed = get_game()
-    return jsonify({ 'state': state, 'revealed': revealed, 'solved': all_solved(state, revealed) })
+    return jsonify({'state': state, 'revealed': revealed, 'solved': all_solved(state, revealed)})
 
 @app.route('/answer', methods=['POST'])
 def answer():
@@ -423,7 +441,6 @@ def answer():
 
     norm_guess = normalize_answer(guess)
     if norm_guess == placement['answer_norm']:
-        # reveal letters
         if placement['orientation'] == 'H':
             for i in range(placement['length']):
                 r, c = placement['row'], placement['col'] + i
@@ -439,7 +456,7 @@ def answer():
         msg = "❌ Incorrecto. Revisa ortografía (se ignoran acentos/espacios)."
         ok = False
     s, rv = get_game()
-    return jsonify({ 'ok': ok, 'message': msg, 'state': s, 'revealed': rv, 'solved': all_solved(s, rv) })
+    return jsonify({'ok': ok, 'message': msg, 'state': s, 'revealed': rv, 'solved': all_solved(s, rv)})
 
 @app.route('/reveal', methods=['POST'])
 def reveal():
@@ -450,18 +467,17 @@ def reveal():
                 revealed[r][c] = state['grid'][r][c]
     set_revealed(revealed)
     s, rv = get_game()
-    return jsonify({ 'state': s, 'revealed': rv, 'solved': True })
+    return jsonify({'state': s, 'revealed': rv, 'solved': True})
 
 @app.route('/reset', methods=['POST'])
 def reset():
     new_game()
     s, rv = get_game()
-    return jsonify({ 'state': s, 'revealed': rv, 'solved': False })
-
+    return jsonify({'state': s, 'revealed': rv, 'solved': False})
 
 def _payload_state():
     s, rv = get_game()
-    return { 'state': s, 'revealed': rv, 'solved': all_solved(s, rv) }
+    return {'state': s, 'revealed': rv, 'solved': all_solved(s, rv)}
 
 if __name__ == '__main__':
     import os
